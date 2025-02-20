@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Throne of Secrets</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0d1b2a, #1b263b);
+      min-height: 100vh;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Cg fill="%23FFD700" fill-opacity="0.1"%3E%3Ccircle cx="10" cy="10" r="2"/%3E%3Ccircle cx="30" cy="20" r="1"/%3E%3Ccircle cx="50" cy="15" r="2"/%3E%3Ccircle cx="70" cy="25" r="1"/%3E%3Ccircle cx="90" cy="10" r="2"/%3E%3C/g%3E%3C/svg%3E');
+      background-size: 100px 100px;
+    }
+    #game-wrapper {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      padding: 2rem;
+      margin: 2rem auto;
+      max-width: 800px;
+      border: 2px solid #FFD700;
+    }
+    .role-box {
+      border: 2px dashed #FFD700;
+      padding: 1.5rem;
+      border-radius: 10px;
+      background: #f8f9fa;
+      font-weight: bold;
+      color: #343a40;
+      animation: shuffle 1.5s infinite;
+    }
+    @keyframes shuffle {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .btn {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+    .card {
+      border: none;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    }
+    .logo {
+      max-width: 150px;
+      margin-bottom: 1rem;
+    }
+    .score-table th, .score-table td {
+      vertical-align: middle;
+    }
+    .text-golden {
+      color: #FFD700;
+    }
+    @media (max-width: 576px) {
+      #game-wrapper { margin: 1rem; padding: 1.5rem; }
+      .btn { width: 100%; margin-bottom: 0.5rem; }
+      .logo { max-width: 100px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container my-5">
+    <div id="game-wrapper" class="col-12 col-md-10 col-lg-8 text-center">
+      <!-- Start Game -->
+      <div id="start-game" class="mb-4">
+        <img src="https://i.imgur.com/4xY8Z7n.png" alt="Throne of Secrets Logo" class="logo">
+        <h1 class="mb-4 text-dark">Throne of Secrets</h1>
+        <div class="row justify-content-center">
+          <div class="col-12 col-sm-8 col-md-6">
+            <input id="playerName" type="text" class="form-control mb-3" placeholder="Enter your name" />
+            <button id="startGameBtn" class="btn btn-primary">Join Game</button>
+            <div id="error-message" class="alert alert-danger d-none mt-3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Role Assignment -->
+      <div id="role-assignment" class="d-none">
+        <h2 class="mb-3 text-dark">Role Assignment</h2>
+        <div class="role-box mx-auto">
+          <p id="role-message">Shuffling roles...</p>
+        </div>
+      </div>
+
+      <!-- Game Screen -->
+      <div id="game-screen" class="d-none">
+        <h2 class="mb-4 text-dark">Round <span id="current-round">1</span></h2>
+        <div class="card mb-4">
+          <div class="card-body text-dark">
+            <p><strong>Username:</strong> <span id="player-name"></span></p>
+            <p><strong>Your Role:</strong> <span id="player-role" class="text-capitalize text-golden"></span></p>
+            <p><strong>Your Points:</strong> <span id="player-points">0</span></p>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-body">
+            <h4 class="card-title text-center text-dark">Players</h4>
+            <ul id="player-list" class="list-group list-group-flush"></ul>
+          </div>
+        </div>
+
+        <div id="police-actions" class="card mb-4 d-none">
+          <div class="card-body">
+            <h4 class="card-title text-center text-dark">Identify the Thief</h4>
+            <ul id="thief-guess-list" class="list-group list-group-flush"></ul>
+          </div>
+        </div>
+
+        <div id="result-message" class="alert alert-success text-center mt-4 d-none" role="alert"></div>
+        <div class="text-center">
+          <button id="nextRoundBtn" class="btn btn-success me-2">Next Round</button>
+          <button id="exitGameBtn" class="btn btn-warning">Exit Game</button>
+        </div>
+      </div>
+
+      <!-- Final Scores -->
+      <div id="final-scores" class="d-none">
+        <h2 class="mb-4 text-dark">Game Over</h2>
+        <div class="card">
+          <div class="card-body">
+            <h4 class="card-title text-center text-dark">Score Table</h4>
+            <div class="table-responsive">
+              <table class="table table-bordered score-table">
+                <thead class="table-light">
+                  <tr id="score-table-header">
+                    <th>Player</th>
+                    <!-- Rounds dynamically added -->
+                    <th>Total Score</th>
+                  </tr>
+                </thead>
+                <tbody id="scoreboard"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="text-center mt-4">
+          <button id="restartGameBtn" class="btn btn-danger">Restart Game</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let playerRole = "";
+    let playerName = "";
+    let currentRound = 1;
+
+    function showError(message) {
+      const errorDiv = document.getElementById("error-message");
+      errorDiv.textContent = message;
+      errorDiv.classList.remove("d-none");
+      setTimeout(() => errorDiv.classList.add("d-none"), 3000);
+    }
+
+    document.getElementById("startGameBtn").addEventListener("click", () => {
+      playerName = document.getElementById("playerName").value.trim();
+      if (!playerName) {
+        showError("Please enter a name!");
+        return;
+      }
+      socket.emit("joinGame", playerName);
+    });
+
+    socket.on("updatePlayers", (players) => {
+      document.getElementById("player-list").innerHTML = players
+        .map(player => `<li class="list-group-item">${player.name}</li>`).join("");
+    });
+
+    socket.on("rolesAssigned", (data) => {
+      const me = data.players.find(p => p.name === playerName);
+      if (me) {
+        playerRole = me.role;
+        document.getElementById("player-name").textContent = me.name;
+        document.getElementById("player-role").textContent = me.role;
+        document.getElementById("player-points").textContent = me.points || 0;
+        if (playerRole === "Police") {
+          document.getElementById("police-actions").classList.remove("d-none");
+          populateThiefGuessList(data.players);
+        }
+      }
+      document.getElementById("start-game").classList.add("d-none");
+      document.getElementById("role-assignment").classList.add("d-none");
+      document.getElementById("game-screen").classList.remove("d-none");
+      document.getElementById("nextRoundBtn").classList.add("d-none");
+    });
+
+    function populateThiefGuessList(players) {
+      const thiefGuessListUl = document.getElementById("thief-guess-list");
+      thiefGuessListUl.innerHTML = "";
+      players.forEach(player => {
+        if (player.name !== playerName) {
+          const li = document.createElement("li");
+          li.textContent = player.name;
+          li.classList.add("list-group-item", "list-group-item-action");
+          li.addEventListener("click", () => socket.emit("guessThief", player.name));
+          thiefGuessListUl.appendChild(li);
+        }
+      });
+    }
+
+    socket.on("result", (data) => {
+      const me = data.players.find(p => p.name === playerName);
+      const resultMessage = document.getElementById("result-message");
+      resultMessage.innerHTML = data.message;
+      resultMessage.classList.remove("d-none");
+      document.getElementById("player-points").textContent = me.points || 0;
+      document.getElementById("current-round").textContent = data.currentRound;
+      document.getElementById("nextRoundBtn").classList.remove("d-none");
+      document.getElementById("police-actions").classList.add("d-none");
+    });
+
+    document.getElementById("nextRoundBtn").addEventListener("click", () => {
+      socket.emit("nextRound");
+    });
+
+    document.getElementById("exitGameBtn").addEventListener("click", () => {
+      socket.emit("exitGame");
+    });
+
+    socket.on("gameOver", (data) => {
+      document.getElementById("game-screen").classList.add("d-none");
+      document.getElementById("final-scores").classList.remove("d-none");
+      const scoreboard = document.getElementById("scoreboard");
+      const header = document.getElementById("score-table-header");
+      scoreboard.innerHTML = "";
+
+      const maxRounds = Math.max(...data.players.map(p => p.roundScores.length));
+      header.innerHTML = "<th>Player</th>";
+      for (let i = 1; i <= maxRounds; i++) {
+        header.innerHTML += `<th>Round ${i}</th>`;
+      }
+      header.innerHTML += "<th>Total Score</th>";
+
+      data.players.forEach(player => {
+        const tr = document.createElement("tr");
+        const roundScores = player.roundScores || [];
+        let rowHTML = `<td>${player.name}</td>`;
+        for (let i = 0; i < maxRounds; i++) {
+          rowHTML += `<td>${roundScores[i]?.score || 0}</td>`;
+        }
+        rowHTML += `<td>${player.totalScore || 0}</td>`;
+        tr.innerHTML = rowHTML;
+        scoreboard.appendChild(tr);
+      });
+    });
+
+    document.getElementById("restartGameBtn").addEventListener("click", () => {
+      socket.emit("restartGame");
+    });
+
+    socket.on("gameRestarted", () => {
+      location.reload();
+    });
+  </script>
+</body>
+</html>
